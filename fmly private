@@ -1,0 +1,390 @@
+local SAB_LIVE = function() return true end
+local _SABCAP = {}
+if not LPH_OBFUSCATED then
+    local ok, env = pcall(getfenv)
+    local _envs = {}
+    if ok and type(env) == "table" then _envs[#_envs + 1] = env end
+    if getgenv then local gok, g = pcall(getgenv); if gok and type(g) == "table" then _envs[#_envs + 1] = g end end
+    if type(_G) == "table" then _envs[#_envs + 1] = _G end
+    for _, e in ipairs(_envs) do
+        if not e["LPH_ATTRIBUTES"] then e["LPH_ATTRIBUTES"] = function() end end
+        if not e["VM"]     then e["VM"]     = function() end end
+        if not e["PRESET"] then e["PRESET"] = function() end end
+        if not e["ERROR_HANDLING"] then e["ERROR_HANDLING"] = function() end end
+        if not e["LPH_ENCSTR"] then e["LPH_ENCSTR"] = function(s) return s end end
+        if not e["LPH_ENCNUM"] then e["LPH_ENCNUM"] = function(n) return n end end
+    end end
+
+-- Delta compatibility: normalize common executor globals when available.
+do
+    local env = (type(getgenv) == "function" and getgenv()) or _G
+    if type(env) == "table" then
+        if env.gethui == nil then env.gethui = function() return game:GetService("CoreGui") end end
+        if env.getgenv == nil then env.getgenv = function() return env end end
+        if env.getfenv == nil then env.getfenv = function() return env end end
+        if env.setclipboard == nil and env.toclipboard ~= nil then env.setclipboard = env.toclipboard end
+        if env.request == nil then env.request = env.http_request or (type(env.syn) == "table" and env.syn.request) end
+        if env.http_request == nil and env.request ~= nil then env.http_request = env.request end
+        if env.queue_on_teleport == nil and env.queueonteleport ~= nil then env.queue_on_teleport = env.queueonteleport end
+    end
+end
+-- FAST OFF-LOAD TP (Meerko method): read the authoritative synchronizer/channel
+-- AnimalList (instant + accurate) instead of waiting for workspace models to stream.
+-- This is rose's own sync-scan path (SharedState.ScanAllPlots), just enabled by default.
+if _G.JAF_NoSynchronizer   == nil then _G.JAF_NoSynchronizer   = false end
+if _G.JAF_ScanViaInstances == nil then _G.JAF_ScanViaInstances = true  end
+if _G.JAF_WaitBasesBeforeTp == nil then _G.JAF_WaitBasesBeforeTp = false end
+_G.JAF_M2 = function(ax, az, bx, bz) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+    local dx, dz = ax - bx, az - bz
+    return math.sqrt(dx * dx + dz * dz)
+end
+local _P; _P = function(o, ...) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+            for i = 1, select("#", ...), 2 do o[select(i, ...)] = select(i + 1, ...) end return o end
+do
+    local _clsMemo = {}
+    local _isACN; _isACN = (function(cn, inst, cls) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        if _G.JAF_ClassMemo == false then return inst:IsA(cls) end
+        local m = _clsMemo[cls]
+        if not m then m = {}; _clsMemo[cls] = m end
+        local v = m[cn]
+        if v == nil then v = inst:IsA(cls); m[cn] = v end
+        return v
+    end)
+    _G.JAF_IsACN = _isACN
+    _G.JAF_IsA = (function(inst, cls) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        if _G.JAF_ClassMemo == false then return inst:IsA(cls) end
+        return _isACN(inst.ClassName, inst, cls)
+    end) end
+_G.JAF_BootReady = false
+if _G.JAF_BootYield == false then _G.JAF_BootReady = true end
+if _G.JAF_BootYield ~= false then
+    task.spawn(function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+    pcall(function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        local t0 = os.clock()
+        local cap = tonumber(_G.JAF_BootYieldMax) or 20
+        if not game:IsLoaded() then game.Loaded:Wait() end
+        local RS = game:GetService("ReplicatedStorage")
+        local pkgs = RS:WaitForChild("Packages", 10)
+        local netF = pkgs and pkgs:WaitForChild("Net", 10)
+        if netF then
+            local last, stable = -1, 0
+            while os.clock() - t0 < cap do
+                local n = #netF:GetChildren()
+                if n == last and n > 0 then
+                    stable = stable + 1
+                    if stable >= 2 then break end
+                else
+                    stable, last = 0, n
+                end
+                task.wait(0.2)
+            end end
+        _G.JAF_BootYieldTook = os.clock() - t0
+    end)
+    _G.JAF_BootReady = true
+    end) end
+if not game:IsLoaded() then game.Loaded:Wait() end
+do
+    local _efOn = true
+    pcall(function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        if type(isfile) == "function" and type(readfile) == "function" and isfile("rosehub.json") then
+            local d = game:GetService("HttpService"):JSONDecode(readfile("rosehub.json"))
+            if type(d) == "table" and d.FpsOptimizer == false then _efOn = false end
+        end end)
+    if _efOn then
+        local _efPlayers = game:GetService("Players")
+        local _efCls = {"Shirt","Pants","ShirtGraphic","Accessory","Hat","HairAccessory",
+            "FaceAccessory","NeckAccessory","ShoulderAccessory","FrontAccessory",
+            "BackAccessory","WaistAccessory"}
+        local function _efStrip(obj, isOther) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+            if _G.JAF_FpsOptimizer == false then return end
+            pcall(function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+                if obj.Name == "Overhead" then return end
+                for _, c in ipairs(_efCls) do if obj:IsA(c) then obj:Destroy(); return end end
+                if isOther and obj:IsA("BasePart") and obj.Name ~= "HumanoidRootPart" then
+                    local s = obj.Size
+                    if s.X > 10 or s.Y > 10 or s.Z > 10 then
+                        _P(obj, "Transparency", 1, "Transparency", 1, "CanCollide", false, "CanQuery", false, "CanTouch", false, "CastShadow", false)
+                    end end end) end
+        local function _efChar(char) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+            if not char then return end
+            local _lp = _efPlayers.LocalPlayer
+            local isOther = (_lp ~= nil) and (_efPlayers:GetPlayerFromCharacter(char) ~= _lp)
+            task.spawn(function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+                for _, d in ipairs(char:GetDescendants()) do _efStrip(d, isOther) end
+            end)
+            char.DescendantAdded:Connect(function(d) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+task.defer(_efStrip, d, isOther) end)
+        end
+        local function _efHook(plr) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+            if plr.Character then _efChar(plr.Character) end
+            plr.CharacterAdded:Connect(_efChar)
+        end
+        for _, plr in ipairs(_efPlayers:GetPlayers()) do pcall(_efHook, plr) end
+        _efPlayers.PlayerAdded:Connect(_efHook)
+    end end
+_G.SAB_T_GameLoaded = tick()
+if not _G.JAF_WaitPackages then
+    local _pkgCache
+    _G.JAF_WaitPackages = function() LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        if _pkgCache and _pkgCache.Parent then return _pkgCache end
+        local RS = game:GetService("ReplicatedStorage")
+        local p = RS:FindFirstChild("Packages")
+        while not p do p = RS:WaitForChild("Packages", 5) end
+        _pkgCache = p
+        return p
+    end end
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local _SyncReal = nil
+-- use the getgc-based channel reader instead of require()-ing / calling the
+-- Synchronizer module (same approach the working Extras/Teleport hubs use).
+if _G.JAF_NoSynchronizer == nil then _G.JAF_NoSynchronizer = true end
+local _SyncProxy
+local function _syncMod() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+    if _G.JAF_NoSynchronizer == true then return nil end
+    if _SyncReal ~= nil then return _SyncReal end
+    local ok, m = pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Synchronizer")) end)
+    if ok and type(m) == "table" then _SyncReal = m end
+    return _SyncReal
+end
+_G.JAF_SyncMod = _syncMod
+_G.JAF_SyncModLoaded = function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return _SyncReal ~= nil end
+_SyncProxy = setmetatable({}, {
+    __index = function(_, k) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        local m = _syncMod(); if not m then return nil end
+        local v = m[k]
+        if type(v) ~= "function" then return v end
+        return function(a, ...) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+if rawequal(a, _SyncProxy) then return v(m, ...) end return v(a, ...) end
+    end,
+    __newindex = function(_, k, v) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+local m = _syncMod(); if m then pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+m[k] = v end) end end,
+})
+local Synchronizer = _SyncProxy
+task.spawn(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+local t0 = os.clock() _syncMod() _G.JAF_SyncModWarmMs = (os.clock() - t0) * 1000 end)
+_G.JAF_Mod = (function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+    local cache = {}
+    return function(folder, name) LPH_ATTRIBUTES(VM(NONE), ERROR_HANDLING(false))
+        local key = folder .. "." .. name
+        local hit = cache[key]
+        if hit ~= nil then return hit or nil end
+        local ok, mod = pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+            local RS2 = game:GetService("ReplicatedStorage")
+            return require(RS2:WaitForChild(folder, 10):WaitForChild(name, 10))
+        end)
+        cache[key] = (ok and mod) or false
+        return cache[key] or nil
+    end end)()
+do
+    local _RS = game:GetService("ReplicatedStorage")
+    local _D  = _RS:WaitForChild("Datas")
+    local okA, _A = pcall(require, _D:WaitForChild("Animals"))
+    local okG, _G_ = pcall(require, _D:WaitForChild("Game"))
+    local okM, _M = pcall(require, _D:WaitForChild("Mutations"))
+    local okT, _T = pcall(require, _D:WaitForChild("Traits"))
+    _G.JAF_SafeGen = function(index, mutation, traits, _player) LPH_ATTRIBUTES(PRESET(FAST), ERROR_HANDLING(false))
+        if _G.JAF_UseGameGen == true then
+            local okX, vX = pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return require(_RS.Shared.Animals):GetGeneration(index, mutation, traits, nil) end)
+            if okX then return vX end
+        end
+        if not (okA and _A) then return 0 end
+        local e = _A[index]
+        if not e then return 0 end
+        local base = e.Generation
+        if not base then local mod = (okG and _G_ and _G_.Game and _G_.Game.AnimalGanerationModifier) or 0 base = (e.Price or 0) * mod end
+        local mult, sleepy = 1, false
+        local _mu = mutation and okM and _M and _M[mutation]
+        if _mu then mult = mult + (_mu.Modifier or 0) end
+        if traits and okT and _T then
+            for _, t in pairs(traits) do
+                local tr = _T[t]
+                if tr then if t == "Sleepy" then sleepy = true else mult = mult + (tr.MultiplierModifier or 0) end end
+            end end
+        local v = base * mult
+        if sleepy then v = v * 0.5 end
+        return math.round(v)
+    end end
+_G.Synchronizer = Synchronizer
+if _G.JAF_NoSynchronizer == nil then _G.JAF_NoSynchronizer = true end
+if _G.JAF_NoCarpetScan   == nil then _G.JAF_NoCarpetScan   = false end
+if _G.JAF_NoUpvalues == nil then _G.JAF_NoUpvalues = true end
+if _G.JAF_NoFSHook   == nil then _G.JAF_NoFSHook   = true end
+_G.JAF_UseGameGen = false
+do
+    local realT = getfenv(0)
+    local BAD = {
+        writefile=1, readfile=1, appendfile=1, isfile=1, delfile=1, listfiles=1, makefolder=1,
+        isfolder=1, delfolder=1, loadstring=1, hookfunction=1, hookmetamethod=1, newcclosure=1,
+        getgenv=1, getrenv=1, getreg=1, getgc=1, getrawmetatable=1, setrawmetatable=1, setreadonly=1,
+        getconnections=1, firesignal=1, gethui=1, get_hidden_gui=1, getcustomasset=1, setclipboard=1,
+        queue_on_teleport=1, getscriptclosure=1, getscriptbytecode=1, decompile=1, identifyexecutor=1,
+        getexecutorname=1, request=1, http_request=1, syn=1, protect_gui=1, checkcaller=1,
+        islclosure=1, iscclosure=1, clonefunction=1, getcallingscript=1, getnilinstances=1,
+        setthreadidentity=1, getthreadidentity=1, set_thread_identity=1, get_thread_identity=1,
+    }
+    local cleanT = setmetatable({}, {
+        __index    = function(_, k) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+if BAD[k] then return nil end return realT[k] end,
+        __newindex = function(_, k, v) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+realT[k] = v end,
+    })
+    local function safeCall(f, ...) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        if _G.JAF_NoSafeCall == true then return pcall(f, ...) end
+        local args = table.pack(...)
+        local body = function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+setfenv(0, cleanT) return table.pack(pcall(f, table.unpack(args, 1, args.n))) end
+        setfenv(body, cleanT)
+        local co = coroutine.create(body)
+        local ok, packed = coroutine.resume(co)
+        if not ok then return false, packed end
+        if type(packed) ~= "table" then return false, "safeCall: target yielded" end
+        return table.unpack(packed, 1, packed.n)
+    end
+    _G.JAF_SafeCall = safeCall
+    local chanCache = setmetatable({}, {__mode = "k"})
+    local function wrapChannel(ch) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        if ch == nil or (type(ch) ~= "table" and type(ch) ~= "userdata") then return ch end
+        local hit = chanCache[ch]; if hit then return hit end
+        local w = setmetatable({}, {
+            __index = function(_, k) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+                local v = ch[k]
+                if type(v) ~= "function" then return v end
+                return function(_, ...) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+local ok, r = safeCall(v, ch, ...) if not ok then return nil end return r end
+            end,
+            __newindex = function(_, k, v) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+ch[k] = v end,
+        })
+        chanCache[ch] = w
+        return w
+    end
+    _G.JAF_WrapChannel = wrapChannel
+    local _chanTable, _chanAt = nil, 0
+    local HEAP_MIN = 24
+    local heapScanAsync
+    local _heapBusy, _heapDone, _missAt = false, false, 0
+    local RETRY_COOLDOWN = 3
+    local _heapMissAt = 0
+    local HEAP_RETRY  = 5
+    local GUIDPAT_C = "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+    local function _looksLikeRegistry(t) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        if type(t) ~= "table" then return false end
+        local hits, n = 0, 0
+        for k, chan in pairs(t) do
+            n = n + 1
+            if n > 64 then break end
+            if type(k) == "string" and #k == 36 and k:match(GUIDPAT_C) and type(chan) == "table"
+               and type(rawget(chan, "CacheTable")) == "table" then
+                hits = hits + 1
+                if hits >= 3 then return true end
+            end end
+        return false
+    end
+    _G.JAF_ChanValid = function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return _looksLikeRegistry(_chanTable) end
+    local _needCache, _needAt, _haveCache = 0, 0, 0
+    local _pulled = {}
+    local _pullT0 = tick()      -- ⭐own clock: JAF_HubStart is defined much later in the file
+    _G.JAF_Pulled = _pulled
+    local function _requestData(name) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        local pk = ReplicatedStorage:FindFirstChild("Packages")
+        local sy = pk and pk:FindFirstChild("Synchronizer")
+        local rf = sy and sy:FindFirstChild("RequestData")
+        if not rf or not rf:IsA("RemoteFunction") then return nil end
+        local ok, res = pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return rf:InvokeServer(name) end)
+        if ok and type(res) == "table" then return res end
+        return nil
+    end
+    _G.JAF_PullPlot = function(name) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        local ct = _requestData(name)
+        if ct then
+            _pulled[name] = ct
+            _G.JAF_PullOk = (tonumber(_G.JAF_PullOk) or 0) + 1
+        else
+            _G.JAF_PullFail = (tonumber(_G.JAF_PullFail) or 0) + 1
+        end
+        return ct
+    end
+    local function _instanceChans() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+        if not (getconnections and debug and debug.getupvalues) then return nil end
+        local pk = ReplicatedStorage:FindFirstChild("Packages")
+        local sy = pk and pk:FindFirstChild("Synchronizer")
+        local cf = sy and sy:FindFirstChild("Channel")
+        if not cf then return nil end
+        local map, n = {}, 0
+        for _, re in ipairs(cf:GetChildren()) do
+            if re:IsA("RemoteEvent") then
+                local okC, conns = pcall(getconnections, re.OnClientEvent)
+                if okC and type(conns) == "table" then
+                    for _, conn in ipairs(conns) do
+                        local okF, f = pcall(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+return conn.Function end)
+                        if okF and type(f) == "function" then
+                            local okU, uvs = pcall(debug.getupvalues, f)
+                            if okU and type(uvs) == "table" then
+                                for _, uv in ipairs(uvs) do
+                                    if type(uv) == "table" and type(rawget(uv, "CacheTable")) == "table" then
+                                        map[re.Name] = uv
+                                        n = n + 1
+                                        break
+                                    end end end end
+                        if map[re.Name] then break end
+                    end end end end
+        local function _realCount(c) LPH_ATTRIBUTES(ERROR_HANDLING(false))
+            if type(c) ~= "table" then return -1 end
+            local al = rawget(c, "AnimalList") or rawget(c, "Animals")
+            if type(al) ~= "table" then return -1 end
+            local n2 = 0
+            for _, a in pairs(al) do if type(a) == "table" then n2 = n2 + 1 end end
+            return n2
+        end
+        local _inWindow = (tick() - _pullT0) < (tonumber(_G.JAF_PullTrustWindow) or 15)
+        if not _inWindow and next(_pulled) ~= nil then
+            local anyLive = false
+            for kk in pairs(_pulled) do
+                local c2 = map[kk]
+                if c2 and _realCount(rawget(c2, "CacheTable")) >= 0 then anyLive = true break end
+            end
+            if anyLive then
+                table.clear(_pulled)
+                _G.JAF_PullDropped = (tonumber(_G.JAF_PullDropped) or 0) + 1
+            end
+        end
+        for k, ct in pairs(_pulled) do
+            local cur   = map[k]
+            local curCT = cur and rawget(cur, "CacheTable")
+            if cur == nil then
+                map[k] = { CacheTable = ct }
+                n = n + 1
+            elseif _inWindow and _realCount(ct) > _realCount(curCT) then
+                map[k] = { CacheTable = ct }
+                _G.JAF_PullPreferred = (tonumber(_G.JAF_PullPreferred) or 0) + 1
+            end end
+        if n == 0 then return nil end
+        _G.JAF_ChanInstCount = n
+        if not _G.JAF_ChansFirstAt then _G.JAF_ChansFirstAt = tick() end
+        return map
+    end
+    _G.JAF_InstanceChans = _instanceChans
+    if _G.JAF_PullOnJoin ~= false then
+        task.spawn(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+            local t0 = os.clock()
+            local plotsF = workspace:FindFirstChild("Plots") or workspace:WaitForChild("Plots", 10)
+            if not plotsF then return end
+            local kids = plotsF:GetChildren()
+            local left = #kids
+            for _, pl in ipairs(kids) do task.spawn(function() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+_G.JAF_PullPlot(pl.Name) left = left - 1 end) end
+            local t1 = os.clock()
+            while left > 0 and (os.clock() - t1) < 8 do task.wait(0.02) end
+            _G.JAF_PullMs = (os.clock() - t0) * 1000
+            local got = 0 ; for _ in pairs(_pulled) do got = got + 1 end
+            local function allSettled() LPH_ATTRIBUTES(ERROR_HANDLING(false))
+                for _, ct in pairs(_pulled) do
+                    if type(ct) == "table" and rawget(ct, "O
